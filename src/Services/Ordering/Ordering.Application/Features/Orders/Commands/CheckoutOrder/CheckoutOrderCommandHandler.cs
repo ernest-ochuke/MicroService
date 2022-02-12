@@ -1,0 +1,57 @@
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+using AutoMapper;
+using MediatR;
+using Microsoft.Extensions.Logging;
+using Microsoft.Win32.SafeHandles;
+using Ordering.Application.Contracts.Infrastructure;
+using Ordering.Application.Contracts.Persistence;
+using Ordering.Application.Models;
+using Ordering.Domain.Entities;
+
+namespace Ordering.Application.Features.Orders.Commands.CheckoutOrder
+{
+    public class CheckoutOrderCommandHandler : IRequestHandler<CheckoutOrderCommand, int>
+    {
+        private readonly IOrderRepository _orderRepository;
+        private readonly IMapper _mapper;
+        private readonly ILogger<CheckoutOrderCommandHandler> _logger;
+        private readonly IEmailService _emailService;
+
+        public CheckoutOrderCommandHandler(IMapper mapper, IOrderRepository orderRepository, IEmailService emailService, ILogger<CheckoutOrderCommandHandler> logger)
+        {
+             _mapper = mapper ?? throw new ArgumentNullException(nameof(mapper));
+             _orderRepository = orderRepository ?? throw new ArgumentNullException(nameof(orderRepository));
+             _emailService = emailService ?? throw new ArgumentNullException(nameof(emailService));
+             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        }
+
+        public async Task<int> Handle(CheckoutOrderCommand request, CancellationToken cancellationToken)
+        {
+            var orderEntity = _mapper.Map<Order>(request);
+            var newOrder = await _orderRepository.AddAsync(orderEntity);
+
+            _logger.LogInformation($"Order {newOrder.Id} is Successfully Created");
+
+            await SendMail(newOrder);
+
+            return newOrder.Id;
+        }
+
+        private async Task SendMail(Order order)
+        {
+            var email = new Email(){To ="eokosobo@gmail.com", Body =$"Order was created.", Subject=""};
+
+            try
+            {
+                await _emailService.SendEmail(email);
+            }
+            catch (System.Exception ex)
+            {
+                 // TODO
+                 _logger.LogError($"Order {order.Id} failed due to an error with mail service : {ex.Message}");
+            }
+        }
+    }
+}
